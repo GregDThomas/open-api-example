@@ -21,6 +21,13 @@ repositories {
 	mavenCentral()
 }
 
+configurations {
+    cucumberAnnotationProcessor.extendsFrom annotationProcessor
+    cucumberImplementation.extendsFrom implementation
+    cucumberRuntimeOnly.extendsFrom runtimeOnly
+    cucumberCompileOnly.extendsFrom compileOnly
+}
+
 dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-web'
 	compileOnly 'org.projectlombok:lombok'
@@ -30,11 +37,46 @@ dependencies {
     implementation project(':api-server')
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.3.0'
+    implementation 'com.google.guava:guava:33.0.0-jre'
 
+    cucumberImplementation platform('io.cucumber:cucumber-bom:7.15.0')
+    cucumberImplementation 'org.junit.platform:junit-platform-suite:1.10.2'
+    cucumberImplementation 'io.cucumber:cucumber-java'
+    cucumberImplementation 'io.cucumber:cucumber-junit-platform-engine'
+    cucumberImplementation 'io.cucumber:cucumber-spring'
+    cucumberImplementation 'org.springframework.boot:spring-boot-starter-test'
+    cucumberImplementation project(':api-client')
+    cucumberImplementation 'org.apache.httpcomponents.client5:httpclient5:5.3.1'
 }
 
-tasks.named('test') {
-	useJUnitPlatform()
+sourceSets {
+    cucumber {
+        java {
+            compileClasspath += main.output
+            runtimeClasspath += main.output
+
+            srcDir file('src/cucumber/java')
+        }
+        resources.srcDir file('src/cucumber/resources')
+    }
+}
+
+tasks.register('cucumberTest', Test) {
+    mustRunAfter tasks.test
+    testClassesDirs = sourceSets.cucumber.output.classesDirs
+    classpath = sourceSets.cucumber.runtimeClasspath
+    inputs.dir file('src/cucumber')
+    outputs.dir file('build/test-results/cucumber')
+    dependsOn cucumberClasses
+}
+check.dependsOn tasks.cucumberTest
+
+tasks.withType(Copy).configureEach {
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+}
+
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
 }
 
 // Note - normally I would suggest having a dedicated project that contains just the OpenAPI specification
