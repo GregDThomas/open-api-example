@@ -1,0 +1,66 @@
+openapi: 3.0.3
+info:
+    title: Example OpenAPI 3.0 Greeting server
+    description: |-
+        This is a sample OpenAPI specification for a simple greeting server.
+    contact:
+        email: greg.d.thomas@gmail.com
+    license:
+        name: Apache 2.0
+        url: https://www.apache.org/licenses/LICENSE-2.0.html
+    version: 1.0.0
+
+servers:
+    - url: http://localhost:8080
+
+tags:
+    - name: Greeting
+      description: Provides greetings
+
+paths:
+    /api/v1/greeting:
+        get:
+            tags:
+                - Greeting
+            summary: Retrieves the current greeting
+            operationId: getGreeting
+            responses:
+                '200':
+                    description: The current greeting
+                    content:
+                        text/plain:
+                            schema:
+                                type: string
+                            example: Hello world
+
+        patch:
+            tags:
+                - Greeting
+            summary: Updates the current greeting
+            operationId: updateGreeting
+            requestBody:
+                description: The details of the updated greeting
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                interjection:
+                                    type: string
+                                    format: string
+                                    minLength: 1
+                                    example: Hello
+                                noun:
+                                    type: string
+                                    format: string
+                                    minLength: 1
+                                    example: world
+            responses:
+                '200':
+                    description: The updated greeting
+                    content:
+                        text/plain:
+                            schema:
+                                type: string
+                            example: Hello world

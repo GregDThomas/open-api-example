@@ -1,1 +1,3 @@
 rootProject.name = 'open-api-example'
+
+include 'api-model', 'api-client', 'api-server'

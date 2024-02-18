@@ -26,8 +26,190 @@ dependencies {
 	compileOnly 'org.projectlombok:lombok'
 	annotationProcessor 'org.projectlombok:lombok'
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+
+    implementation project(':api-server')
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.3.0'
+
 }
 
 tasks.named('test') {
 	useJUnitPlatform()
+}
+
+// Note - normally I would suggest having a dedicated project that contains just the OpenAPI specification
+// and a Gradle script to build the model/client/server artifacts and publish them to an artifact repository.
+// Other projects can then depend on the api-client or openapi-server artifact according to needs.
+subprojects {
+	apply plugin: 'java-library'
+
+    java {
+        withSourcesJar()
+    }
+
+	ext {
+		openApiSpec = file(getRootProject().getLayout().getProjectDirectory().dir('src/main/resources/openapi.yaml'))
+        outputDir = file(getLayout().getBuildDirectory().dir('generated-sources/openapi'))
+		basePackage = 'com.example.openapiexample.rest'
+	}
+
+	repositories {
+		mavenCentral()
+	}
+
+	configurations {
+		openApiGenerator
+	}
+
+	dependencies {
+        openApiGenerator 'org.openapitools:openapi-generator-cli:7.3.0'
+        api platform('org.springframework.boot:spring-boot-dependencies:3.2.2')
+	}
+
+    sourceSets {
+        main {
+            java {
+                srcDir new File((File)outputDir, 'src/main/java')
+            }
+        }
+    }
+}
+
+project('api-model') {
+
+    dependencies {
+		api 'com.fasterxml.jackson.core:jackson-databind'
+        api 'jakarta.validation:jakarta.validation-api'
+        api 'jakarta.annotation:jakarta.annotation-api'
+    }
+
+    tasks.register('generateOpenApiModel', JavaExec) {
+        outputs.dir(outputDir)
+        inputs.file(openApiSpec)
+        classpath = configurations.openApiGenerator
+        mainClass = 'org.openapitools.codegen.OpenAPIGenerator'
+        args = ['generate',
+                '--input-spec', openApiSpec,
+                '--output', outputDir,
+                '--generator-name', 'java',
+                '--library', 'resttemplate',
+                '--invoker-package', basePackage,
+                '--api-package', basePackage,
+                '--model-package', "${basePackage}.model",
+                '--model-name-prefix', 'Rest',
+                '--type-mappings', 'OffsetDateTime=java.time.Instant',
+                '--import-mappings', 'OffsetDateTime=java.time.Instant',
+                '--global-property', 'models,modelTests=false,modelDocs=false',
+                '--additional-properties', [
+                        'dateLibrary=java8',
+                        'openApiNullable=false',
+                        'useBeanValidation=true',
+                        'sortModelPropertiesByRequiredFlag=false',
+                        'sortParamsByRequiredFlag=false',
+                        'enumUnknownDefaultCase=true',
+                        'useJakartaEe=true'
+                ].join(',')
+        ]
+    }
+    tasks.compileJava.dependsOn(generateOpenApiModel)
+    tasks.generateOpenApiModel.dependsOn(cleanGenerateOpenApiModel)
+    tasks.sourcesJar.dependsOn(generateOpenApiModel)
+}
+
+project('api-client') {
+
+    dependencies {
+        api project(':api-model')
+        api 'org.springframework:spring-web'
+        api 'org.springframework:spring-context'
+    }
+
+    tasks.register('generateOpenApiClient', JavaExec) {
+        outputs.dir(outputDir)
+        inputs.file(openApiSpec)
+        classpath = configurations.openApiGenerator
+        mainClass = 'org.openapitools.codegen.OpenAPIGenerator'
+        args = ['generate',
+                '--input-spec', openApiSpec,
+                '--output', outputDir,
+                '--generator-name', 'java',
+                '--library', 'resttemplate',
+                '--invoker-package', basePackage,
+                '--api-package', basePackage,
+                '--api-name-suffix', 'Client',
+                '--model-package', "${basePackage}.model",
+                '--model-name-prefix', 'Rest',
+                '--type-mappings', 'OffsetDateTime=java.time.Instant',
+                '--import-mappings', 'OffsetDateTime=java.time.Instant',
+                '--global-property', 'apis,apiTests=false,apiDocs=false,supportingFiles',
+                '--additional-properties', [
+                        'dateLibrary=java8',
+                        'openApiNullable=false',
+                        'useBeanValidation=true',
+                        'sortModelPropertiesByRequiredFlag=false',
+                        'sortParamsByRequiredFlag=false',
+                        'enumUnknownDefaultCase=true',
+                        'useJakartaEe=true'
+                ].join(',')
+        ]
+    }
+
+    sourceSets {
+        main {
+            java {
+                exclude '**/ServerConfiguration.java'
+                exclude '**/ServerVariable.java'
+            }
+        }
+    }
+
+    tasks.compileJava.dependsOn(generateOpenApiClient)
+    tasks.sourcesJar.dependsOn(generateOpenApiClient)
+    tasks.generateOpenApiClient.dependsOn(cleanGenerateOpenApiClient)
+}
+
+project('api-server') {
+
+    dependencies {
+        api project(':api-model')
+        api 'org.springframework:spring-web'
+        api 'org.springframework:spring-context'
+        api 'io.swagger.core.v3:swagger-annotations:2.2.20'
+    }
+
+    tasks.register('generateOpenApiServer', JavaExec) {
+        inputs.file(openApiSpec)
+        outputs.dir(outputDir)
+        classpath = configurations.openApiGenerator
+        mainClass = 'org.openapitools.codegen.OpenAPIGenerator'
+        args = ['generate',
+                '--input-spec', openApiSpec,
+                '--output', outputDir,
+                '--generator-name', 'spring',
+                '--library', 'spring-boot',
+                '--api-package', basePackage,
+                '--invoker-package', basePackage,
+                '--model-package', "${basePackage}.model",
+                '--model-name-prefix', 'Rest',
+                '--type-mappings', 'OffsetDateTime=java.time.Instant',
+                '--import-mappings', 'OffsetDateTime=java.time.Instant',
+                '--global-property', 'apis,apiTests=false,apiDocs=false',
+                '--additional-properties', [
+                        'dateLibrary=java8',
+                        'interfaceOnly=true',
+                        'skipDefaultInterface=true',
+                        'useBeanValidation=true',
+                        'performBeanValidation=true',
+                        'useTags=true',
+                        'openApiNullable=false',
+                        'sortModelPropertiesByRequiredFlag=false',
+                        'sortParamsByRequiredFlag=false',
+                        'useJakartaEe=true'
+                ].join(',')
+        ]
+    }
+
+    tasks.compileJava.dependsOn(generateOpenApiServer)
+    tasks.sourcesJar.dependsOn(generateOpenApiServer)
+    tasks.generateOpenApiServer.dependsOn(cleanGenerateOpenApiServer)
 }
